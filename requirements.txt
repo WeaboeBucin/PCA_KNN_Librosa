@@ -1,0 +1,5 @@
+scipy==1.10.1
+librosa==0.9.1
+pickle==0.7.5
+scikit_learn==1.2.2
+streamlit==1.27.2
