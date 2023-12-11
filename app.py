@@ -1,25 +1,16 @@
 import streamlit as st
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.neighbors import KNeighborsClassifier
-from pickle import dump
-from sklearn.preprocessing import StandardScaler
+import pickle
 import librosa
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
-import scipy.stats as stats
 from scipy.stats import skew, kurtosis, mode
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import MinMaxScaler
+import scipy.stats as stats
 
 # Judul aplikasi
-st.title("Klasifikasi Audio dengan PCA")
+st.title("Klasifikasi Emosi dari Audio dengan PCA")
 
 # Deskripsi
 st.write("Aplikasi ini memungkinkan Anda mengunggah file audio dan melakukan klasifikasi menggunakan PCA dan K-Nearest Neighbors (KNN).")
-
 def hitung_statistik(audio_file):
     zcr_data = pd.DataFrame(columns=['mean', 'std_dev', 'max_value', 'min_value', 'median', 'skewness', 'kurt', 'q1', 'q3', 'mode_value', 'iqr', 'ZCR Mean', 'ZCR Median', 'ZCR Std Deviasi', 'ZCR Skewness', 'ZCR Kurtosis'])
     y, sr = librosa.load(audio_file)
@@ -63,18 +54,21 @@ def hitung_statistik(audio_file):
 
     # Tambahkan data ke DataFrame
     # return[mean, std_dev, max_value, min_value, median, skewness, kurt, q1, q3, mode_value, iqr, mean_zcr, median_zcr, std_dev_zcr, skewness_zcr, kurtosis_zcr, mean_rms, median_rms,std_dev_rms, skewness_rms, kurtosis_rms]
-    zcr_data = zcr_data.append({'mean' : mean, 'std_dev' : std_dev, 'max_value' :max_value, 'min_value' :min_value, 'median':median, 'skewness':skewness, 'kurt':kurt, 'q1':q1, 'q3':q3, 'mode_value':mode_value, 'iqr':iqr, 'ZCR Mean': mean_zcr, 'ZCR Median': median_zcr, 'ZCR Std Deviasi': std_dev_zcr, 'ZCR Skewness': skewness_zcr, 'ZCR Kurtosis': kurtosis_zcr,'RMS Mean': mean_rms, 'RMS Median': median_rms, 'RMS Std Deviasi': std_dev_rms, 'RMS Skewness': skewness_rms, 'RMS Kurtosis': kurtosis_rms}, ignore_index=True)
+    zcr_data = zcr_data._append({'mean' : mean, 'std_dev' : std_dev, 'max_value' :max_value, 'min_value' :min_value, 'median':median, 'skewness':skewness, 'kurt':kurt, 'q1':q1, 'q3':q3, 'mode_value':mode_value, 'iqr':iqr, 'ZCR Mean': mean_zcr, 'ZCR Median': median_zcr, 'ZCR Std Deviasi': std_dev_zcr, 'ZCR Skewness': skewness_zcr, 'ZCR Kurtosis': kurtosis_zcr,'RMS Mean': mean_rms, 'RMS Median': median_rms, 'RMS Std Deviasi': std_dev_rms, 'RMS Skewness': skewness_rms, 'RMS Kurtosis': kurtosis_rms}, ignore_index=True)
     return zcr_data
 
+with open('standar_scaler.pkl', 'rb') as file:
+    standar_scaler = pickle.load(file)
 
-dataknn= pd.read_csv('hasil_zcr_rms.csv')
-X = dataknn.drop(['Label','File'], axis=1)  # Ganti 'target_column' dengan nama kolom target
-y = dataknn['Label']
-# split data into train and test sets
-X_train,X_test,y_train, y_test= train_test_split(X, y, random_state=1, test_size=0.2)
+# Memuat model KNN untuk kategori emosi dengan normalisasi ZScore
+with open('new_classifier.pkl', 'rb') as file:
+    knn_class = pickle.load(file)
+
+with open('new_pca.pkl', 'rb') as file:
+    pca_pkl = pickle.load(file)
 
 # Unggah file audio
-uploaded_file = st.file_uploader("Unggah file audio (format WAV)", type=["wav"])
+uploaded_file = st.file_uploader("Unggah 1 file audio (format WAV)", type=["wav"])
 
 if uploaded_file is not None:
     # Memuat data audio (misalnya: fitur audio dari file WAV)
@@ -82,36 +76,21 @@ if uploaded_file is not None:
     # Misalnya, jika Anda menggunakan pustaka librosa, Anda dapat menggunakannya untuk mengambil fitur-fitur audio.
     st.audio(uploaded_file, format="audio/wav")
     if st.button("Deteksi Audio"):
+        # audio_data = librosa.load(uploaded_file, sr=None)
         # Simpan file audio yang diunggah
-        audio_path = "audio_diunggah.wav"
-        with open(audio_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        # audio_path = "audio.wav"
+        # with open(audio_path,"wb") as f:
+        #     f.write(uploaded_file.getbuffer())
         # Hanya contoh data dummy (harap diganti dengan pengambilan data yang sesungguhnya)
-        data_mentah = hitung_statistik(audio_path)
-        data_mentah.to_csv('hasil_zcr_rms1.csv', index=False)
-        # Standarisasi fitur (opsional, tapi dapat meningkatkan kinerja PCA dan KNN)
+        data_mentah = hitung_statistik(uploaded_file)
+
         kolom = ['ZCR Mean', 'ZCR Median', 'ZCR Std Deviasi', 'ZCR Kurtosis', 'ZCR Skewness', 'RMS Mean', 'RMS Median', 'RMS Std Deviasi', 'RMS Kurtosis', 'RMS Skewness']
-        # Inisialisasi StandardScaler
-        scaler = StandardScaler()
-        scaler.fit(X_train)
-        X_train_scaled = scaler.transform(X_train)
-        # Lakukan standarisasi pada kolom yang telah ditentukan
-        data_ternormalisasi = scaler.transform(data_mentah)
+        data_ternormalisasi_zscore = standar_scaler.transform(data_mentah[kolom])
 
-        MinimMaximscaler = MinMaxScaler(feature_range=(0, 1))
-        MinimMaximscaler.fit(X_train)
-        data_MinimMaxim = MinimMaximscaler.transform(data_mentah)
-        # Reduksi dimensi menggunakan PCA
-        sklearn_pca = PCA(n_components=1)
-        X_train_pca = sklearn_pca.fit_transform(X_train_scaled)
-        X_pca = sklearn_pca.transform(data_ternormalisasi)
-        MM_pca = sklearn_pca.transform(data_MinimMaxim)
-
-        # Inisialisasi KNN Classifier
-        classifier = KNeighborsClassifier(n_neighbors=2)
-        classifier.fit(X_train_pca, y_train)
-        y_prediksi = classifier.predict(X_pca)
+        data_pca = pca_pkl.transform(data_ternormalisasi_zscore)
+        label_emosi_pca_standar = knn_class.predict(data_pca)
 
         # Menampilkan hasil klasifikasi
-        st.write("Hasil Klasifikasi:")
-        st.write(y_prediksi)
+        st.write("Hasil Klasifikasi Dengan Scaler Standart:")
+        st.write(label_emosi_pca_standar)
+
